@@ -1,0 +1,9 @@
+apiVersion: v2
+name: monitor
+description: Node resource exporter
+version: 0.0.1
+appVersion: "1.16.0"
+dependencies:
+  - name: kube-prometheus-stack
+    version: 69.2.0
+    repository: https://prometheus-community.github.io/helm-charts
