@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -46,6 +47,7 @@ type NodeUsage struct {
 	CPU []float64 `json:"cpu"`
 	Mem NodeMem   `json:"memory"`
 	Net NodeNet   `json:"net"`
+	GPU NodeGPUs  `json:"gpus"`
 }
 
 type NodeMem struct {
@@ -58,6 +60,56 @@ type NodeMem struct {
 type NodeNet struct {
 	SendByte uint64 `json:"send_bytes"`
 	RecByte  uint64 `json:"recv_bytes"`
+}
+
+type NodeGPUs []NodeGPU
+type NodeGPU struct {
+	Used  float64
+	Total float64
+	Usage float64
+}
+
+func getGPUStatus() NodeGPUs {
+	result := make(NodeGPUs, 0)
+	ret := nvml.Init()
+	if ret != nvml.SUCCESS {
+		return result
+	}
+	defer func() {
+		ret := nvml.Shutdown()
+		if ret != nvml.SUCCESS {
+			return
+		}
+	}()
+
+	count, ret := nvml.DeviceGetCount()
+	if ret != nvml.SUCCESS {
+		return result
+	}
+
+	for i := 0; i < count; i++ {
+		device, ret := nvml.DeviceGetHandleByIndex(i)
+		if ret != nvml.SUCCESS {
+			continue
+		}
+
+		name, _ := device.GetName()
+		memInfo, ret := device.GetMemoryInfo()
+		if ret != nvml.SUCCESS {
+			continue
+		}
+		usedMB := float64(memInfo.Used) / MB
+		totalMB := float64(memInfo.Total) / MB
+		usagePercent := float64(memInfo.Used) / float64(memInfo.Total) * 100
+		result = append(result, NodeGPU{
+			Used:  usedMB,
+			Total: totalMB,
+			Usage: usagePercent,
+		})
+		fmt.Printf("GPU %d: %s\n", i, name)
+		fmt.Printf("  VRAM Used: %f MB / %f MB (%.2f%%)\n", usedMB, totalMB, usagePercent)
+	}
+	return result
 }
 
 func getNodeMem() NodeMem {
@@ -94,6 +146,7 @@ func GetNodeUsage(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		CPU: getNodeCPUs(),
 		Mem: getNodeMem(),
 		Net: getNodeNet(time.Second),
+		GPU: getGPUStatus(),
 	}
 	jsonData, err := json.Marshal(node)
 	if err != nil {
