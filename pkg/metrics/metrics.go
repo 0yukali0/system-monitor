@@ -33,6 +33,29 @@ var (
 		},
 		[]string{"method", "path"},
 	)
+
+	CPU_usage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "cpu_resource_usage",
+			Help: "cpu percentage",
+		},
+		[]string{"node"},
+	)
+
+	Mem_usage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "memory_resource_usage",
+			Help: "memory percentage",
+		},
+		[]string{"node"},
+	)
+	Net_usage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "net_byte",
+			Help: "net bytes",
+		},
+		[]string{"node", "method"},
+	)
 )
 
 func init() {

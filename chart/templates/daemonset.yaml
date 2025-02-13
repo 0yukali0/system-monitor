@@ -22,7 +22,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: monitor
-        image: 0yukali0/node-monitor:v0.0.1-cuda
+        image: 0yukali0/node-monitor:v0.0.1-scratch
         imagePullPolicy: Always
         ports:
           - containerPort: 8080

@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"runtime"
 	"time"
 
-	"github.com/NVIDIA/go-nvml/pkg/nvml"
+	//"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -22,6 +23,17 @@ const (
 	MB = 1024 * KB
 	GB = 1024 * MB
 )
+
+var (
+	NodeName string
+)
+
+func init() {
+	NodeName = os.Getenv("NODE_NAME")
+	if NodeName == "" {
+		NodeName = "unknown"
+	}
+}
 
 type AppMem struct {
 	Sys        float64 `json:"sys"`
@@ -69,6 +81,7 @@ type NodeGPU struct {
 	Usage float64
 }
 
+/*
 func getGPUStatus() NodeGPUs {
 	result := make(NodeGPUs, 0)
 	ret := nvml.Init()
@@ -111,9 +124,11 @@ func getGPUStatus() NodeGPUs {
 	}
 	return result
 }
+*/
 
 func getNodeMem() NodeMem {
 	v, _ := mem.VirtualMemory()
+	metrics.Mem_usage.WithLabelValues(NodeName).Set(v.UsedPercent)
 	return NodeMem{
 		Total:     float64(v.Total) / GB,
 		Available: float64(v.Available) / GB,
@@ -129,6 +144,8 @@ func getNodeNet(interval time.Duration) NodeNet {
 
 	recvPerSec := (io2[0].BytesRecv - io1[0].BytesRecv) / uint64(interval.Seconds())
 	sendPerSec := (io2[0].BytesSent - io1[0].BytesSent) / uint64(interval.Seconds())
+	metrics.Net_usage.WithLabelValues(NodeName, "send").Set(float64(sendPerSec))
+	metrics.Net_usage.WithLabelValues(NodeName, "recv").Set(float64(recvPerSec))
 	return NodeNet{
 		SendByte: sendPerSec,
 		RecByte:  recvPerSec,
@@ -136,8 +153,9 @@ func getNodeNet(interval time.Duration) NodeNet {
 }
 
 func getNodeCPUs() []float64 {
-	usage, _ := cpu.Percent(0, false)
-	return usage
+	percent, _ := cpu.Percent(0, false)
+	metrics.CPU_usage.WithLabelValues(NodeName).Set(percent[0])
+	return percent
 }
 
 func GetNodeUsage(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -146,7 +164,7 @@ func GetNodeUsage(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		CPU: getNodeCPUs(),
 		Mem: getNodeMem(),
 		Net: getNodeNet(time.Second),
-		GPU: getGPUStatus(),
+		//GPU: getGPUStatus(),
 	}
 	jsonData, err := json.Marshal(node)
 	if err != nil {
@@ -178,10 +196,35 @@ func GetSystemUsage(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 }
 
 func main() {
+	go func() {
+		ticker := time.NewTicker(period)
+		defer ticker.Stop()
+		for range ticker.C {
+			fmt.Print("cpu")
+			_ = getNodeCPUs()
+		}
+	}()
+	go func() {
+		ticker := time.NewTicker(period)
+		defer ticker.Stop()
+		for range ticker.C {
+			fmt.Print("net")
+			_ = getNodeNet(time.Second)
+		}
+	}()
+	go func() {
+		ticker := time.NewTicker(period)
+		defer ticker.Stop()
+		for range ticker.C {
+			fmt.Print("mem")
+			_ = getNodeMem()
+		}
+	}()
 	router := httprouter.New()
 	router.GET("/node", metrics.MetricsMiddleware(GetNodeUsage))
 	router.GET("/system", metrics.MetricsMiddleware(GetSystemUsage))
 	router.Handler("GET", "/metrics", promhttp.Handler())
+	period := time.Duration(5) * time.Second
 	if err := http.ListenAndServe(":8080", router); err != nil {
 		panic(err)
 	}

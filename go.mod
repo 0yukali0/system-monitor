@@ -3,7 +3,6 @@ module system-monitor
 go 1.23.5
 
 require (
-	github.com/NVIDIA/go-nvml v0.12.4-1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/shirou/gopsutil/v4 v4.25.1

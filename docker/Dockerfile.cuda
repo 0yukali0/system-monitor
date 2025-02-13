@@ -8,7 +8,7 @@ RUN wget https://golang.org/dl/go1.23.5.linux-amd64.tar.gz && \
     rm go1.23.5.linux-amd64.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o app .
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o app .
 
 FROM alpine
 COPY --from=builder /build/app /app
